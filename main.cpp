@@ -1408,27 +1408,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	char keys[256] = { 0 };
 	char preKeys[256] = { 0 };
 
-	Spring spring{};
-	spring.anchor = { 0.0f, 0.0f, 0.0f };
-	spring.naturalLength = 1.0f;
-	spring.stiffness = 100.0f;
-	spring.dampingCoefficient = 2.0f;
+	Sphere sphere;
+	sphere.center = {1.0f, 0.0f, 0.0f};
+	sphere.radius = 0.05f;
 
-	Ball ball{};
-	ball.position = { 1.2f, 0.0f, 0.0f };
-	ball.mass = 2.0f;
-	ball.radius = 0.05f;
-	ball.color = BLUE;
+	Vector3 origin = {0.0f, 0.0f, 0.0f};
+	float radius = 0.8f;
 
 	float  deltaTime = 1.0f / 60.0f;
+	bool start = false;
 
+	float angularVelocity = 3.14f;
+	float angle = 0.0f;
 
 	Vector3 cameraPos{ 0.0f, 0.0f, 0.0f };
 	Vector3 cameraSize{ 1.0f, 1.0f, 1.0f };
 	Vector3 cameraRotate{ 0.26f, 0.0f, 0.0f };
 	Vector3 cameraTranslate{ 0.0f, 1.9f, -6.49f };
-
-	bool startSpring = false;
 
 	/*Matrix4x4 cameraMatrix;*/
 	Matrix4x4 viewMatrix;
@@ -1437,7 +1433,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// main関数の直前あたりに追加
 
-	float radius = 6.0f;    // 原点からの距離
+	float cameraRadius = 6.0f;    // 原点からの距離
 	const float rotationSpeed = 0.005f; // ドラッグ速度の調整係数
 
 	float theta = 0.0f;
@@ -1462,42 +1458,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓更新処理ここから
 		///
 
-		Vector3 diff = ball.position - spring.anchor;
-		float length = Length(diff);
-		if (length != 0.0f && startSpring)
-		{
-			Vector3 direction = Normalize(diff);
-			Vector3 restPosition = spring.anchor + direction * spring.naturalLength;
-			Vector3 displacement = length * (ball.position - restPosition);
-			Vector3 restoringForce = -spring.stiffness * displacement;
-			// 減衰抵抗を計算する
-			Vector3 dampingForce = -spring.dampingCoefficient * ball.velocity;
-			// 減衰抵抗も加味して、物体にかかる力を決定する
-			Vector3 force = restoringForce + dampingForce;
-			ball.aceleration = force / ball.mass;
-
-			if (std::abs(ball.aceleration.x) <= 0.01f)
-			{
-				ball.aceleration.x = 0.0f;
-				startSpring = false;
-			}
-		}
-
-		
-		if (startSpring)
-		{
-			// 加速度も速度もどちらも秒を基準とした値である
-			// それが、1/60秒間(deltaTiem)適用されたと考える
-			ball.velocity += ball.aceleration * deltaTime;
-			ball.position += ball.velocity * deltaTime;
-		}
-		else
-		{
-			ball.velocity.x = 0.0f;
-			ball.aceleration.x = 0.0f;
-		}
 		
 
+		if(start)
+		{ 
+			angle += angularVelocity * deltaTime;
+		}
+
+		sphere.center.x = origin.x + std::cos(angle) * radius;
+		sphere.center.y = origin.y + std::sin(angle) * radius;
+		sphere.center.z = origin.z;
 
 		if (Novice::IsPressMouse(2) && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow))
 		{
@@ -1528,20 +1498,20 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		cameraRotate.x = phi;
 		cameraRotate.y = theta;
 
-		cameraTranslate.x = radius * std::cos(theta) * std::sin(phi);
-		cameraTranslate.y = radius * std::sin(theta);
-		cameraTranslate.z = radius * std::cos(theta) * std::cos(phi);
+		cameraTranslate.x = cameraRadius * std::cos(theta) * std::sin(phi);
+		cameraTranslate.y = cameraRadius * std::sin(theta);
+		cameraTranslate.z = cameraRadius * std::cos(theta) * std::cos(phi);
 
 		ImGui::Begin("Window");
 		if (ImGui::Button("Start"))
 		{
-			startSpring = true;
+			start = true;
 		}
 		if (ImGui::Button("Reset"))
 		{
-			startSpring = false;
-			ball.position = { 1.2f, 0.0f, 0.0f };
-			
+			start = false;
+			sphere.center = { 1.0f, 0.0f, 0.0f };
+			angle = 0.0f;
 		}
 		ImGui::End();
 
@@ -1549,8 +1519,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 		// ビュー行列を生成
-
-
 		viewMatrix = MakeLookAtMatrix(cameraTranslate, { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f });
 
 		projectionMatrix = MakePerspectiveFovMatrix(0.45f, static_cast<float>(kWindowWidth) / static_cast<float>(kWindowHeight), 0.1f, 100.0f);
@@ -1570,11 +1538,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓描画処理ここから
 		///
 
+
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
-
-		DrawLine(ball.position, spring.anchor, viewProjectionMatrix, viewportMatrix, WHITE);
-		DrawSphere({ball.position, ball.radius}, viewProjectionMatrix, viewportMatrix, ball.color);
-
+		DrawSphere(sphere, viewProjectionMatrix, viewportMatrix, WHITE);
+		
 		///
 		/// ↑描画処理ここまで
 		///
@@ -1583,7 +1550,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		Novice::EndFrame();
 
 		// ESCキーが押されたらループを抜ける
-		if (preKeys[DIK_ESCAPE] == 0 && keys[DIK_ESCAPE] != 0) {
+		if (preKeys[DIK_ESCAPE] == 0 && keys[DIK_ESCAPE] != 0) 
+		{
 			break;
 		}
 	}
