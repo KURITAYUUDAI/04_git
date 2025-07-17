@@ -1383,15 +1383,16 @@ struct Spring
 {
 	// アンカー。固定された端の位置
 	Vector3 anchor;
-	float naturalLength;	// 自然長
-	float stiffness;		// 剛性。ばね定数k
+	float naturalLength;		// 自然長
+	float stiffness;			// 剛性。ばね定数k
+	float dampingCoefficient;	// 減衰係数
 };
 
 struct Ball
 {
 	Vector3 position;		// ボールの位置
 	Vector3 velocity;		// ボールの速度
-	Vector3 cceleration;	// ボールの加速度
+	Vector3 aceleration;	// ボールの加速度
 	float mass;				// ボールの質量
 	float radius;			// ボールの半径
 	unsigned int color;		// ボールの色
@@ -1407,13 +1408,27 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	char keys[256] = { 0 };
 	char preKeys[256] = { 0 };
 
-	
+	Spring spring{};
+	spring.anchor = { 0.0f, 0.0f, 0.0f };
+	spring.naturalLength = 1.0f;
+	spring.stiffness = 100.0f;
+	spring.dampingCoefficient = 2.0f;
+
+	Ball ball{};
+	ball.position = { 1.2f, 0.0f, 0.0f };
+	ball.mass = 2.0f;
+	ball.radius = 0.05f;
+	ball.color = BLUE;
+
+	float  deltaTime = 1.0f / 60.0f;
+
 
 	Vector3 cameraPos{ 0.0f, 0.0f, 0.0f };
 	Vector3 cameraSize{ 1.0f, 1.0f, 1.0f };
 	Vector3 cameraRotate{ 0.26f, 0.0f, 0.0f };
 	Vector3 cameraTranslate{ 0.0f, 1.9f, -6.49f };
 
+	bool startSpring = false;
 
 	/*Matrix4x4 cameraMatrix;*/
 	Matrix4x4 viewMatrix;
@@ -1447,7 +1462,41 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓更新処理ここから
 		///
 
+		Vector3 diff = ball.position - spring.anchor;
+		float length = Length(diff);
+		if (length != 0.0f && startSpring)
+		{
+			Vector3 direction = Normalize(diff);
+			Vector3 restPosition = spring.anchor + direction * spring.naturalLength;
+			Vector3 displacement = length * (ball.position - restPosition);
+			Vector3 restoringForce = -spring.stiffness * displacement;
+			// 減衰抵抗を計算する
+			Vector3 dampingForce = -spring.dampingCoefficient * ball.velocity;
+			// 減衰抵抗も加味して、物体にかかる力を決定する
+			Vector3 force = restoringForce + dampingForce;
+			ball.aceleration = force / ball.mass;
 
+			if (std::abs(ball.aceleration.x) <= 0.01f)
+			{
+				ball.aceleration.x = 0.0f;
+				startSpring = false;
+			}
+		}
+
+		
+		if (startSpring)
+		{
+			// 加速度も速度もどちらも秒を基準とした値である
+			// それが、1/60秒間(deltaTiem)適用されたと考える
+			ball.velocity += ball.aceleration * deltaTime;
+			ball.position += ball.velocity * deltaTime;
+		}
+		else
+		{
+			ball.velocity.x = 0.0f;
+			ball.aceleration.x = 0.0f;
+		}
+		
 
 
 		if (Novice::IsPressMouse(2) && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow))
@@ -1474,9 +1523,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::ResetMouseDragDelta(ImGuiMouseButton_Middle);
 		}
 
-		int wheel = Novice::GetWheel(); // 前フレームとの差分
-		radius -= wheel * 0.005f;              // 感度は 0.1f などで調整
-		radius = max(1.0f, min(radius, 20.0f)); // クランプして近づきすぎ防止
+		
 
 		cameraRotate.x = phi;
 		cameraRotate.y = theta;
@@ -1486,7 +1533,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		cameraTranslate.z = radius * std::cos(theta) * std::cos(phi);
 
 		ImGui::Begin("Window");
-		
+		if (ImGui::Button("Start"))
+		{
+			startSpring = true;
+		}
+		if (ImGui::Button("Reset"))
+		{
+			startSpring = false;
+			ball.position = { 1.2f, 0.0f, 0.0f };
+			
+		}
 		ImGui::End();
 
 
@@ -1516,7 +1572,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
-
+		DrawLine(ball.position, spring.anchor, viewProjectionMatrix, viewportMatrix, WHITE);
+		DrawSphere({ball.position, ball.radius}, viewProjectionMatrix, viewportMatrix, ball.color);
 
 		///
 		/// ↑描画処理ここまで
