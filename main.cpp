@@ -1398,6 +1398,17 @@ struct Ball
 	unsigned int color;		// ボールの色
 };
 
+struct  Pendulum
+{
+	Vector3 anchor;		// アンカーポイント。固定された端の位置
+	float length;		// 紐の長さ
+	float angle;		// 現在の角度
+	float angularVelocity;	// 角速度w
+	float angularAcceleration;	// 角加速度
+};
+
+
+
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
@@ -1408,18 +1419,28 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	char keys[256] = { 0 };
 	char preKeys[256] = { 0 };
 
-	Sphere sphere;
+	/*Sphere sphere;
 	sphere.center = {1.0f, 0.0f, 0.0f};
 	sphere.radius = 0.05f;
 
 	Vector3 origin = {0.0f, 0.0f, 0.0f};
 	float radius = 0.8f;
 
-	float  deltaTime = 1.0f / 60.0f;
+	float angularVelocity = 3.14f;
+	float angle = 0.0f;*/
+
+	Pendulum pendulum;
+	pendulum.anchor = { 0.0f, 1.0f, 0.0f };
+	pendulum.length = 0.8f;
+	pendulum.angle = 0.7f;
+	pendulum.angularVelocity = 0.0f;
+	pendulum.angularAcceleration = 0.0f;
+
+	Vector3 p;
+
 	bool start = false;
 
-	float angularVelocity = 3.14f;
-	float angle = 0.0f;
+	float  deltaTime = 1.0f / 60.0f;
 
 	Vector3 cameraPos{ 0.0f, 0.0f, 0.0f };
 	Vector3 cameraSize{ 1.0f, 1.0f, 1.0f };
@@ -1460,14 +1481,27 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		
 
-		if(start)
-		{ 
-			angle += angularVelocity * deltaTime;
+		//if(start)
+		//{ 
+		//	angle += angularVelocity * deltaTime;
+		//}
+
+		//sphere.center.x = origin.x + std::cos(angle) * radius;
+		//sphere.center.y = origin.y + std::sin(angle) * radius;
+		//sphere.center.z = origin.z;
+
+		if (start)
+		{
+			pendulum.angularAcceleration = 
+				-(9.8f / pendulum.length) * std::sin(pendulum.angle);
+			pendulum.angularVelocity += pendulum.angularAcceleration * deltaTime;
+			pendulum.angle += pendulum.angularVelocity * deltaTime;
 		}
 
-		sphere.center.x = origin.x + std::cos(angle) * radius;
-		sphere.center.y = origin.y + std::sin(angle) * radius;
-		sphere.center.z = origin.z;
+		// pは振り子の先端の位置。取り付けたいものを取り付ければ良い
+		p.x = pendulum.anchor.x + std::sin(pendulum.angle) * pendulum.length;
+		p.y = pendulum.anchor.y - std::cos(pendulum.angle) * pendulum.length;
+		p.z = pendulum.anchor.z;
 
 		if (Novice::IsPressMouse(2) && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow))
 		{
@@ -1510,12 +1544,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		if (ImGui::Button("Reset"))
 		{
 			start = false;
-			sphere.center = { 1.0f, 0.0f, 0.0f };
-			angle = 0.0f;
+			p = { 1.0f, 0.0f, 0.0f };
+			pendulum.angle = 0.7f;
 		}
 		ImGui::End();
-
-
 
 
 		// ビュー行列を生成
@@ -1528,8 +1560,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		viewportMatrix = MakeViewportMatrix(0.0f, 0.0f, static_cast<float>(kWindowWidth),
 			static_cast<float>(kWindowHeight), 0.0f, 1.0f);
 
-
-
 		///
 		/// ↑更新処理ここまで
 		///
@@ -1540,7 +1570,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
-		DrawSphere(sphere, viewProjectionMatrix, viewportMatrix, WHITE);
+
+		DrawLine(pendulum.anchor, p, viewProjectionMatrix, viewportMatrix, WHITE);
+		DrawSphere({p, 0.1f}, viewProjectionMatrix, viewportMatrix, WHITE);
 		
 		///
 		/// ↑描画処理ここまで
