@@ -1416,6 +1416,44 @@ struct ConicalPendulum
 	float angularVelocity;	// 角速度w
 };
 
+Vector3 Reflect(const Vector3& input, const Vector3& normal)
+{
+	return input - 2.0f * Dot(input, normal) * normal;
+}
+
+struct Capsule
+{
+	Segment segment;
+	float radius;
+};
+
+bool IsCollision(const Capsule& capsel, const Plane& plane)
+{
+	// 線分始点の平面からの距離
+	float distOrigin = Dot(plane.normal, capsel.segment.origin) - plane.distance;
+	// 線分ベクトル
+	Vector3 diff = capsel.segment.diff;
+	// 線分ベクトルと法線の内積
+	float denom = Dot(plane.normal, diff);
+
+	if (denom == 0.0f) 
+	{
+		// 線分が平面と平行 → 始点だけ見て判定
+		return std::abs(distOrigin) <= capsel.radius;
+	}
+
+	// 平面に最も近づく位置 t を求め、線分上に制限
+	float t = -distOrigin / denom;
+	t = std::clamp(t, 0.0f, 1.0f);
+
+	// 線分上の最近接点
+	Vector3 closestPoint = capsel.segment.origin + diff * t;
+	// 最近接点の平面からの距離
+	float distClosest = Dot(plane.normal, closestPoint) - plane.distance;
+
+	return std::abs(distClosest) <= capsel.radius;
+}
+
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
@@ -1443,16 +1481,35 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	pendulum.angularVelocity = 0.0f;
 	pendulum.angularAcceleration = 0.0f;*/
 
-	Vector3 p;
+	/*Vector3 p;
 
 	ConicalPendulum conicalPendulum;
 	conicalPendulum.anchor = { 0.0f, 1.0f, 0.0f };
 	conicalPendulum.length = 0.8f;
 	conicalPendulum.halfApexAngle = 0.7f;
 	conicalPendulum.angle = 0.0f;
-	conicalPendulum.angularVelocity = 0.0f;
+	conicalPendulum.angularVelocity = 0.0f;*/
 
 	Ball ball;
+	ball.position = { 0.0f, 0.0f, 0.0f };
+	ball.velocity = { 0.0f, 0.0f, 0.0f };
+	ball.aceleration = { 0.0f, 0.0f, 0.0f };
+	ball.mass = 2.0f;
+	ball.radius = 0.05f;
+	ball.color = WHITE;
+
+	Vector3 ballStartPosition = {-0.8f, 1.2f, 0.8f};
+	ball.position = ballStartPosition;
+
+	Plane plane;
+	plane.normal = Normalize({-0.2f, -0.9f, -0.3f});
+	plane.distance = 0.0f;
+
+	Segment moveSegment;
+	moveSegment.origin = ball.position;
+	moveSegment.diff = { 0.0f, 0.0f, 0.0f };
+
+	float e = 0.8f; // 反発係数
 
 	bool start = false;
 
@@ -1519,7 +1576,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		//p.y = pendulum.anchor.y - std::cos(pendulum.angle) * pendulum.length;
 		//p.z = pendulum.anchor.z;
 
-		if (start)
+		/*if (start)
 		{
 			conicalPendulum.angularVelocity = 
 				std::sqrt(9.8f / (conicalPendulum.length * std::cos(conicalPendulum.halfApexAngle)));
@@ -1530,7 +1587,57 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		float height = std::cos(conicalPendulum.halfApexAngle) * conicalPendulum.length;
 		ball.position.x = conicalPendulum.anchor.x + radius * std::sin(conicalPendulum.angle);
 		ball.position.y = conicalPendulum.anchor.y - height;
-		ball.position.z = conicalPendulum.anchor.z + radius * std::cos(conicalPendulum.angle);
+		ball.position.z = conicalPendulum.anchor.z + radius * std::cos(conicalPendulum.angle);*/
+
+		// フレーム開始時の位置を保存
+		Vector3 prevPosition = ball.position;
+
+		// 速度・位置を予測
+		ball.velocity += ball.aceleration * deltaTime;
+		Vector3 nextPosition = prevPosition + ball.velocity * deltaTime;
+
+		// 移動セグメントを作成
+		moveSegment = { prevPosition, Subtract(nextPosition, prevPosition) };
+
+		if (IsCollision(Capsule{ moveSegment, ball.radius }, plane))
+		{
+			// カプセルの線分と平面の交点パラメータ t を求める（実装例は下記）
+			float dist0 = Dot(plane.normal, prevPosition) - plane.distance;
+			float denom = Dot(plane.normal, moveSegment.diff);
+			// 法線方向に「面から半径分だけ離れた」位置で線分と交わる t
+			float tHit = (ball.radius - dist0) / denom;
+
+			if (tHit >= 0.0f && tHit <= 1.0f)
+			{
+				// 衝突時刻まで移動し、球の中心を設定
+				Vector3 collisionCenter = Add(prevPosition, Multiply(tHit, moveSegment.diff));
+				// ほんの少し法線方向へオフセットしてめり込み回避
+				const float epsilon = 1e-4f;
+				collisionCenter += plane.normal * epsilon;
+				ball.position = collisionCenter;
+
+				Vector3 reflected = Reflect(ball.velocity, plane.normal);
+				Vector3 projectToNormal = Project(reflected, plane.normal);
+				Vector3 movingDirection = reflected - projectToNormal;
+				Vector3 reflectedVelocity = projectToNormal * e + movingDirection;
+
+				// フレーム残り時間分だけ移動
+				float remain = 1.0f - tHit;
+				ball.position += reflectedVelocity * (deltaTime * remain);
+				ball.velocity = reflectedVelocity;
+			}
+			else
+			{
+				// 衝突時刻が範囲外なら、衝突なしとみなす
+				// 予測位置をそのまま使う
+				ball.position = nextPosition;
+			}
+		}
+		else
+		{
+			// 衝突なしなら予測位置をそのまま使う
+			ball.position = nextPosition;
+		}
 
 		if (Novice::IsPressMouse(2) && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow))
 		{
@@ -1566,18 +1673,26 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		cameraTranslate.z = cameraRadius * std::cos(theta) * std::cos(phi);
 
 		ImGui::Begin("Window");
+        ImGui::DragFloat3("ballStartPosition", &ballStartPosition.x, 0.01f);
+		ImGui::DragFloat3("plane.normal", &plane.normal.x, 0.01f);
+
 		if (ImGui::Button("Start"))
 		{
 			start = true;
+			ball.aceleration = { 0.0f, -9.8f, 0.0f };
 		}
 		if (ImGui::Button("Reset"))
 		{
 			start = false;
-			p = { 1.0f, 0.0f, 0.0f };
-			conicalPendulum.angle = 0.0f;
+			ball.velocity = { 0.0f, 0.0f, 0.0f };
+			ball.aceleration = { 0.0f, 0.0f, 0.0f };
 		}
 		ImGui::End();
 
+		if (!start)
+		{
+			ball.position = ballStartPosition;
+		}
 
 		// ビュー行列を生成
 		viewMatrix = MakeLookAtMatrix(cameraTranslate, { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f });
@@ -1600,8 +1715,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
-		DrawLine(conicalPendulum.anchor, ball.position, viewProjectionMatrix, viewportMatrix, WHITE);
-		DrawSphere({ball.position, 0.1f}, viewProjectionMatrix, viewportMatrix, WHITE);
+		DrawSphere(Sphere{ball.position, ball.radius}, viewProjectionMatrix, viewportMatrix, WHITE);
+		DrawSegment(moveSegment, viewProjectionMatrix, viewportMatrix, 0xFF0000FF);
+		DrawPlane(plane, viewProjectionMatrix, viewportMatrix, 0x00FF00FF);
 		
 		///
 		/// ↑描画処理ここまで
