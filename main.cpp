@@ -1675,6 +1675,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		ImGui::Begin("Window");
         ImGui::DragFloat3("ballStartPosition", &ballStartPosition.x, 0.01f);
 		ImGui::DragFloat3("plane.normal", &plane.normal.x, 0.01f);
+		ImGui::DragFloat("plane.distance", &plane.distance, 0.01f);
 
 		if (ImGui::Button("Start"))
 		{
@@ -1688,6 +1689,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ball.aceleration = { 0.0f, 0.0f, 0.0f };
 		}
 		ImGui::End();
+
+		plane.normal = Normalize(plane.normal);
 
 		if (!start)
 		{
